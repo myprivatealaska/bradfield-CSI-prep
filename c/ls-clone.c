@@ -4,6 +4,8 @@
 #include "string.h"
 #include <sys/stat.h>
 #include "stdbool.h"
+#include <pwd.h>
+#include <grp.h>
 
 #define MAX_PATH_LEN 1000
 
@@ -12,10 +14,9 @@ struct {
     unsigned int l: 1;
 } flags;
 
-bool is_file(const char* path);
-bool is_dir(const char* path);
+
 int print_dir(const char* path);
-struct stat get_file_info(const char* path);
+void print_full_file_info(struct stat* file_stat, char* path);
 void parse_args(char *path, int argc, char *argv[]);
 
 int main(int argc, char *argv[]) {
@@ -24,55 +25,59 @@ int main(int argc, char *argv[]) {
 
     parse_args(path, argc, argv);
 
-    if(is_file(path)){
-        struct stat info = get_file_info(path);
-        printf("%lld\n", info.st_size);
-    } else {
+    struct stat fileStat;
+    stat(path, &fileStat);
+
+    if(S_ISREG(fileStat.st_mode)){
+        print_full_file_info(&fileStat, path);
+    }
+
+    if(S_ISDIR(fileStat.st_mode)){
         print_dir(path);
     }
+
+    return EXIT_SUCCESS;
 }
 
 void parse_args(char *path, int argc, char *argv[]){
-    for(int i = 1; i < argc; i++){
-        if(argv[i][0] == '-'){
-            for(int j = 1; j < sizeof argv[i]; j++){
-                switch (argv[i][j]) {
-                    case 'a':
-                        flags.a = 1;
-                    case 'l':
-                        flags.l = 1;
-                }
+    char c;
+    while (--argc > 0 && (*++argv)[0] == '-') {
+        while((c = *++argv[0]) != '\0') {
+            switch (c) {
+                case 'a':
+                    flags.a = 1;
+                    break;
+                case 'l':
+                    flags.l = 1;
+                    break;
+                default:
+                    printf("%c flag not implemented, skipping\n", c);
             }
-        } else {
-            strcpy(path, argv[i]);
         }
+    }
+
+    if(argc > 0) {
+        strcpy(path, *argv);
     }
 }
 
-
-bool is_file(const char* path){
-    struct stat buf;
-    stat(path, &buf);
-    return S_ISREG(buf.st_mode);
-}
-
-bool is_dir(const char* path){
-    struct stat buf;
-    stat(path, &buf);
-    return S_ISDIR(buf.st_mode);
-}
 
 int print_dir(const char* path) {
     DIR *dir;
     struct dirent *ent;
     if ((dir = opendir(path)) != NULL) {
         // print all the files and directories within directory
+        struct stat fileStat;
         while ((ent = readdir (dir)) != NULL) {
             if(!flags.a && (ent->d_name)[0] == '.')
                 ;
             else
-                // TODO: output whatever info has been requested
-                printf ("%s\n", ent->d_name);
+                if(flags.l) {
+                    stat(ent->d_name, &fileStat);
+                    print_full_file_info(&fileStat, ent->d_name);
+                } else{
+                    printf ("%s\n", ent->d_name);
+                }
         }
         closedir (dir);
         return EXIT_SUCCESS;
@@ -83,8 +88,33 @@ int print_dir(const char* path) {
     }
 }
 
-struct stat get_file_info(const char* path){
-    struct stat buf;
-    stat(path, &buf);
-    return buf;
+void print_full_file_info(struct stat* fileStat, char* path){
+    printf( (S_ISDIR(fileStat->st_mode)) ? "d" : "-");
+    printf( (fileStat->st_mode & S_IRUSR) ? "r" : "-");
+    printf( (fileStat->st_mode & S_IWUSR) ? "w" : "-");
+    printf( (fileStat->st_mode & S_IXUSR) ? "x" : "-");
+    printf( (fileStat->st_mode & S_IRGRP) ? "r" : "-");
+    printf( (fileStat->st_mode & S_IWGRP) ? "w" : "-");
+    printf( (fileStat->st_mode & S_IXGRP) ? "x" : "-");
+    printf( (fileStat->st_mode & S_IROTH) ? "r" : "-");
+    printf( (fileStat->st_mode & S_IWOTH) ? "w" : "-");
+    printf( (fileStat->st_mode & S_IXOTH) ? "x" : "-");
+    printf(" ");
+
+    // TODO: calculate number of files in the dir
+
+    struct passwd *pw = getpwuid(fileStat->st_uid);
+    struct group  *gr = getgrgid(fileStat->st_gid);
+
+    if(pw != 0){
+        printf("%s ", pw->pw_name);
+    }
+    if(gr != 0){
+        printf("%s ", gr->gr_name);
+    }
+    printf("%lld ", fileStat->st_size);
+    printf("%ld ", fileStat->st_mtime);
+    printf("%s", path);
+
+    printf("\n");
 }
