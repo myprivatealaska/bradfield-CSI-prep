@@ -15,8 +15,9 @@ struct {
 } flags;
 
 
-int print_dir(const char* path);
-void print_full_file_info(struct stat* file_stat, char* path);
+int print_path(char* path);
+int print_dir(char* path);
+int print_file(struct stat* file_stat, char* path);
 void parse_args(char *path, int argc, char *argv[]);
 
 int main(int argc, char *argv[]) {
@@ -25,18 +26,11 @@ int main(int argc, char *argv[]) {
 
     parse_args(path, argc, argv);
 
-    struct stat fileStat;
-    stat(path, &fileStat);
-
-    if(S_ISREG(fileStat.st_mode)){
-        print_full_file_info(&fileStat, path);
+    if(print_path(path)){
+        exit(EXIT_FAILURE);
+    } else {
+        exit(EXIT_SUCCESS);
     }
-
-    if(S_ISDIR(fileStat.st_mode)){
-        print_dir(path);
-    }
-
-    return EXIT_SUCCESS;
 }
 
 void parse_args(char *path, int argc, char *argv[]){
@@ -61,34 +55,53 @@ void parse_args(char *path, int argc, char *argv[]){
     }
 }
 
+int print_path(char* path){
+    struct stat fileStat;
+    stat(path, &fileStat);
 
-int print_dir(const char* path) {
+    if(S_ISREG(fileStat.st_mode)){
+        return print_file(&fileStat, path);
+    }
+
+    if(S_ISDIR(fileStat.st_mode)){
+        return print_dir(path);
+    }
+
+    printf("only regular files are directories are supported, skipping %s \n", path);
+    return 1;
+}
+
+
+int print_dir(char* path) {
     DIR *dir;
     struct dirent *ent;
     if ((dir = opendir(path)) != NULL) {
         // print all the files and directories within directory
-        struct stat fileStat;
         while ((ent = readdir (dir)) != NULL) {
             if(!flags.a && (ent->d_name)[0] == '.')
                 ;
             else
                 if(flags.l) {
-                    stat(ent->d_name, &fileStat);
-                    print_full_file_info(&fileStat, ent->d_name);
+                    struct stat fileStat;
+                    stat(path, &fileStat);
+                    print_file(&fileStat, ent->d_name);
                 } else{
                     printf ("%s\n", ent->d_name);
                 }
         }
         closedir (dir);
-        return EXIT_SUCCESS;
+        return 0;
     } else {
-        // could not open directory
-        perror ("");
+        perror("could not open directory");
         return 1;
     }
 }
 
-void print_full_file_info(struct stat* fileStat, char* path){
+int print_file(struct stat* fileStat, char* path){
+    if(!flags.l) {
+        printf ("%s\n", path);
+        return 0;
+    }
     printf( (S_ISDIR(fileStat->st_mode)) ? "d" : "-");
     printf( (fileStat->st_mode & S_IRUSR) ? "r" : "-");
     printf( (fileStat->st_mode & S_IWUSR) ? "w" : "-");
@@ -117,4 +130,5 @@ void print_full_file_info(struct stat* fileStat, char* path){
     printf("%s", path);
 
     printf("\n");
+    return 0;
 }
