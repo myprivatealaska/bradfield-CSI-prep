@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 
 
 #show_sys_info - A script to produce a html file with system info
@@ -13,6 +13,7 @@ TIMESTAMP="Updated on $RIGHT_NOW by $USER"
 
 system_info()
 {
+    #https://www.cyberciti.biz/faq/mac-osx-find-tell-operating-system-version-from-bash-prompt/
     echo "<p>Not implemented</p>"
 }
 
@@ -37,11 +38,21 @@ home_space()
 {
     echo "<h2>Home directory space by user</h2>"
     echo "<pre>"
-    echo "Bytes Directory"
-      # Turn tracing on
-      set -x 
-      du -s /home/* | sort -nr
-      set +x
+    format="%8s%10s%10s %-s\n"
+    printf "$format" "Dirs" "Files" "Blocks" "Directory"
+    printf "$format" "----" "-----" "------" "---------"
+    if [ $(id -u) = "0" ]; then    
+    	dir_list="/Users/*"
+    else
+	dir_list=$HOME
+    fi
+    for home_dir in $dir_list; do
+	total_dirs=$(find $home_dir -type d | wc -l)
+    	total_files=$(find $home_dir -type f | wc -l)
+    	total_blocks=$(du -s $home_dir)
+     	printf "$format" "$total_dirs" "$total_files" "$total_blocks"
+    done
+   
     echo "</pre>" 
 }
 
@@ -128,7 +139,5 @@ fi
 echo "output file = $filename"
 
 
-# Write page (comment out until testing is complete)
-
-# write_page > $filename
+write_page > $filename
 
