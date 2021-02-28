@@ -1,4 +1,4 @@
-module crawler
+module github.com/myprivatealaska/bradfield-CSI-prep/go/mirror/crawler
 
 go 1.14
 
