@@ -1,7 +1,7 @@
 package main
 
 import (
-	"crawler"
+		`github.com/myprivatealaska/bradfield-CSI-prep/go/mirror/crawler`
 )
 
 func main() {
