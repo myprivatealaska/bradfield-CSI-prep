@@ -250,15 +250,6 @@ are particularly in need of outside help.
 
 `
 
-type TestBody struct {
-	Text string
-}
-
-func (t *TestBody) Read(p []byte) (int, error) {
-	p = []byte(t.Text)
-	return len(p), nil
-}
-
 func TestProcessPage(t *testing.T) {
 	r := strings.NewReader(testHtml)
 	urls, _, err := processPage("https://golang.org", r)
