@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -31,7 +32,7 @@ type crawler struct {
 func New(entryUrl string) crawler {
 	c := crawler{
 		EntryUrl: entryUrl,
-		MaxDepth: 4,
+		MaxDepth: 3,
 		// I was getting deadlocks when trying to use sync.Map - Need to figure out why
 		VisitedLock: sync.Mutex{},
 		Visited:     make(map[string]bool),
@@ -80,13 +81,17 @@ func (c crawler) processUrl(url string) ([]string, error) {
 	client := http.Client{}
 	resp, err := client.Get(url)
 	if err != nil {
-		log.Println(errors.Wrap(err, "processPage - can't create http client"))
+		log.Println(errors.Wrap(err, "processUrl - can't create http client"))
 	}
 
 	defer resp.Body.Close()
+	if !strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
+		log.Println(fmt.Sprintf("not html, skipping %v. %v", url, resp.Header.Get("Content-Type")))
+		return []string{}, nil
+	}
 	foundUrls, pageBytes, err := processPage(url, resp.Body)
 	if err != nil {
-		log.Println(fmt.Sprintf("can't processPage page %v. error: %e", resp.Request.URL, err))
+		log.Println(fmt.Sprintf("can't processUrl %v. error: %e", resp.Request.URL, err))
 		return []string{}, err
 	}
 	if err := storePage(resp.Request.URL, pageBytes); err != nil {
@@ -105,27 +110,6 @@ func processPage(rawUrl string, body io.Reader) (parsedUrls []string, updatedPag
 	if err != nil {
 		err = errors.Wrap(err, "parsePage - can't parse rawURL")
 	}
-	//tknz := html.NewTokenizer(body)
-	//for {
-	//	tt := tknz.Next()
-	//
-	//	switch {
-	//	case tt == html.ErrorToken:
-	//		// End of the document, we're done
-	//		return
-	//	case tt == html.StartTagToken:
-	//		token := tknz.Token()
-	//
-	//		if token.Data == "a" {
-	//			for _, attr := range token.Attr {
-	//				if attr.Key == "href" {
-	//					// TODO: filter out needed urls
-	//					parsedUrls = append(parsedUrls, attr.Val)
-	//				}
-	//			}
-	//		}
-	//	}
-	//}
 	// rootNode is now a pointer to the root node of the HTML document. It's essentially the head
 	// of the Linked List
 	rootNode, err := html.Parse(body)
@@ -148,7 +132,6 @@ func processPage(rawUrl string, body io.Reader) (parsedUrls []string, updatedPag
 }
 
 // storePage saves pageBody to the local fs. It creates all dirs as necessary.
-// doesn't throw erorrs, just logs them
 func storePage(pageUrl *url.URL, pageBody io.Reader) error {
 	fileName := filepath.Join(pageUrl.Host, pageUrl.Path)
 	if filepath.Ext(pageUrl.Path) == "" {
@@ -213,12 +196,7 @@ func linkURLs(linkNodes []*html.Node, base *url.URL) (parsedUrls map[string]bool
 				// no need to use regex, Parse is smart!
 				link, err := base.Parse(a.Val)
 				// ignore bad and non-local URLs
-				if err != nil {
-					//log.Printf("skipping %q: %s", a.Val, err)
-					continue
-				}
-				if link.Host != base.Host {
-					//log.Printf("skipping %q: non-local host", a.Val)
+				if err != nil || link.Host != base.Host {
 					continue
 				}
 				urlString := link.String()
